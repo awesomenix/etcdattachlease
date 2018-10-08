@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"go.etcd.io/etcd/clientv3"
-	"go.etcd.io/etcd/pkg/tlsutil"
+	"go.etcd.io/etcd/pkg/transport"
 	"golang.org/x/net/context"
 )
 
@@ -45,20 +45,17 @@ func main() {
 	var cfg *tls.Config
 
 	cfg = nil
-	if *etcdCert != "" {
-		cfg = &tls.Config{}
-		cs := make([]string, 0)
-		if *etcdCACert != "" {
-			cs = append(cs, *etcdCACert)
-		}
+	if *etcdCert != "" && *etcdCACert != "" && *etcdKey != "" {
+		log.Printf("Using TLSConfig")
+		tlsinfo := transport.TLSInfo{}
+		tlsinfo.CertFile = *etcdCert
+		tlsinfo.KeyFile = *etcdKey
+		tlsinfo.TrustedCAFile = *etcdCACert
+
 		var err error
-		cfg.RootCAs, err = tlsutil.NewCertPool(cs)
+		cfg, err = tlsinfo.ClientConfig()
 		if err != nil {
-			log.Fatalf("Error while creating etcd tlsconfig: %v", err)
-		}
-		cfg.GetClientCertificate = func(unused *tls.CertificateRequestInfo) (cert *tls.Certificate, err error) {
-			cert, err = tlsutil.NewCert(*etcdCert, *etcdKey, nil)
-			return cert, err
+			log.Fatalf("Error while creating etcd ClientConfig: %v", err)
 		}
 	}
 
