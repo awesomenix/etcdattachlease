@@ -30,6 +30,7 @@ var (
 	etcdCert      = flag.String("cert", "", "Etcd cert")
 	etcdKey       = flag.String("key", "", "Etcd key")
 	etcdAddress   = flag.String("etcd-address", "", "Etcd address")
+	scanTimeout   = flag.Duration("timeout", 60*time.Second, "Etcd scan timeout default is 60s")
 	ttlKeysPrefix = flag.String("ttl-keys-prefix", "", "Prefix for TTL keys")
 	leaseDuration = flag.Duration("lease-duration", time.Hour, "Lease duration (seconds granularity)")
 )
@@ -71,9 +72,10 @@ func main() {
 	if !strings.HasSuffix(*ttlKeysPrefix, "/") {
 		*ttlKeysPrefix += "/"
 	}
-	ctx := context.Background()
+	ctx, cancelFunc := context.WithTimeout(context.Background(), *scanTimeout)
+	defer cancelFunc()
 
-	log.Printf("Getting all keys from etcd  with prefix %s", *ttlKeysPrefix)
+	log.Printf("Getting all keys from etcd with prefix %s with timeout %v", *ttlKeysPrefix, *scanTimeout)
 	objectsResp, err := client.KV.Get(ctx, *ttlKeysPrefix, clientv3.WithPrefix())
 	if err != nil {
 		log.Fatalf("Error while getting objects to attach to the lease")
