@@ -14,16 +14,21 @@ limitations under the License.
 package main
 
 import (
+	"crypto/tls"
 	"flag"
 	"strings"
 	"time"
 
 	"github.com/golang/glog"
 	"go.etcd.io/etcd/clientv3"
+	"go.etcd.io/etcd/pkg/tlsutil"
 	"golang.org/x/net/context"
 )
 
 var (
+	etcdCACert    = flag.String("cacert", "", "Etcd cacert")
+	etcdCert      = flag.String("cert", "", "Etcd cert")
+	etcdKey       = flag.String("key", "", "Etcd key")
 	etcdAddress   = flag.String("etcd-address", "", "Etcd address")
 	ttlKeysPrefix = flag.String("ttl-keys-prefix", "", "Prefix for TTL keys")
 	leaseDuration = flag.Duration("lease-duration", time.Hour, "Lease duration (seconds granularity)")
@@ -35,7 +40,28 @@ func main() {
 	if *etcdAddress == "" {
 		glog.Fatalf("--etcd-address flag is required")
 	}
-	client, err := clientv3.New(clientv3.Config{Endpoints: []string{*etcdAddress}})
+
+	var cfg *tls.Config
+
+	cfg = nil
+	if *etcdCert != "" {
+		cfg = &tls.Config{}
+		cs := make([]string, 0)
+		if *etcdCACert != "" {
+			cs = append(cs, *etcdCACert)
+		}
+		var err error
+		cfg.RootCAs, err = tlsutil.NewCertPool(cs)
+		if err != nil {
+			glog.Fatalf("Error while creating etcd tlsconfig: %v", err)
+		}
+		cfg.GetClientCertificate = func(unused *tls.CertificateRequestInfo) (cert *tls.Certificate, err error) {
+			cert, err = tlsutil.NewCert(*etcdCert, *etcdKey, nil)
+			return cert, err
+		}
+	}
+
+	client, err := clientv3.New(clientv3.Config{Endpoints: []string{*etcdAddress}, TLS: cfg})
 	if err != nil {
 		glog.Fatalf("Error while creating etcd client: %v", err)
 	}
