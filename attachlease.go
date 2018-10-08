@@ -16,10 +16,10 @@ package main
 import (
 	"crypto/tls"
 	"flag"
+	"log"
 	"strings"
 	"time"
 
-	"github.com/golang/glog"
 	"go.etcd.io/etcd/clientv3"
 	"go.etcd.io/etcd/pkg/tlsutil"
 	"golang.org/x/net/context"
@@ -38,7 +38,7 @@ func main() {
 	flag.Parse()
 
 	if *etcdAddress == "" {
-		glog.Fatalf("--etcd-address flag is required")
+		log.Fatalf("--etcd-address flag is required")
 	}
 
 	var cfg *tls.Config
@@ -53,7 +53,7 @@ func main() {
 		var err error
 		cfg.RootCAs, err = tlsutil.NewCertPool(cs)
 		if err != nil {
-			glog.Fatalf("Error while creating etcd tlsconfig: %v", err)
+			log.Fatalf("Error while creating etcd tlsconfig: %v", err)
 		}
 		cfg.GetClientCertificate = func(unused *tls.CertificateRequestInfo) (cert *tls.Certificate, err error) {
 			cert, err = tlsutil.NewCert(*etcdCert, *etcdKey, nil)
@@ -61,9 +61,10 @@ func main() {
 		}
 	}
 
+	log.Printf("Connecting to etcd %v", *etcdAddress)
 	client, err := clientv3.New(clientv3.Config{Endpoints: []string{*etcdAddress}, TLS: cfg})
 	if err != nil {
-		glog.Fatalf("Error while creating etcd client: %v", err)
+		log.Fatalf("Error while creating etcd client: %v", err)
 	}
 
 	// Make sure that ttlKeysPrefix is ended with "/" so that we only get children "directories".
@@ -72,22 +73,23 @@ func main() {
 	}
 	ctx := context.Background()
 
+	log.Printf("Getting all keys from etcd  with prefix %s", *ttlKeysPrefix)
 	objectsResp, err := client.KV.Get(ctx, *ttlKeysPrefix, clientv3.WithPrefix())
 	if err != nil {
-		glog.Fatalf("Error while getting objects to attach to the lease")
+		log.Fatalf("Error while getting objects to attach to the lease")
 	}
 
 	lease, err := client.Lease.Grant(ctx, int64(*leaseDuration/time.Second))
 	if err != nil {
-		glog.Fatalf("Error while creating lease: %v", err)
+		log.Fatalf("Error while creating lease: %v", err)
 	}
-	glog.Infof("Lease with TTL: %v created", lease.TTL)
+	log.Printf("Lease with TTL: %v created", lease.TTL)
 
-	glog.Infof("Attaching lease to %d entries", len(objectsResp.Kvs))
+	log.Printf("Attaching lease to %d entries", len(objectsResp.Kvs))
 	for _, kv := range objectsResp.Kvs {
 		_, err := client.KV.Put(ctx, string(kv.Key), string(kv.Value), clientv3.WithLease(lease.ID))
 		if err != nil {
-			glog.Errorf("Error while attaching lease to: %s", string(kv.Key))
+			log.Printf("Error while attaching lease to: %s", string(kv.Key))
 		}
 	}
 }
